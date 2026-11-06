@@ -1,0 +1,860 @@
+<!doctype html>
+<!--
+  flower: a quiet focus timer in one file. Open it straight from disk; no server.
+  Sessions are kept in this browser's local storage ("flower.sessions") and can be
+  downloaded as a CSV with the "export" link under the 24-hour strip.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#1b1f29">
+<title>flower</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-32 -32 64 64'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='-4' x2='0' y2='-30'><stop offset='0' stop-color='%23a593cf'/><stop offset='1' stop-color='%23f2d4c3'/></linearGradient><path id='p' d='M0,-4 C7,-9 11,-25 0,-30 C-11,-25 -7,-9 0,-4 Z'/></defs><g fill='url(%23g)'><use href='%23p'/><use href='%23p' transform='rotate(60)'/><use href='%23p' transform='rotate(120)'/><use href='%23p' transform='rotate(180)'/><use href='%23p' transform='rotate(240)'/><use href='%23p' transform='rotate(300)'/></g></svg>">
+<style>
+:root {
+  --bg: #1b1f29;
+  --bg-glow: #222735;
+  --bg-edge: #161921;
+  --ink: 214 218 230;            /* rgb channels, used with alpha */
+  --lilac: #a593cf;
+  --peach: #f2d4c3;
+  --ease: cubic-bezier(.4, 0, .2, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg);
+  background-image: radial-gradient(ellipse 80% 70% at 50% 40%, var(--bg-glow) 0%, var(--bg) 55%, var(--bg-edge) 100%);
+  color: rgb(var(--ink));
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 4vh;
+}
+
+/* ---- the flower ---- */
+
+#flower {
+  width: min(90vw, 62vh, 540px);
+  height: auto;
+  overflow: visible;
+}
+
+#bloom {
+  animation: breathe 10s ease-in-out infinite;
+  transition: opacity 1.4s var(--ease);
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.022); }
+}
+
+#ghosts path {
+  fill: rgb(var(--ink) / .022);
+  stroke: rgb(var(--ink) / .085);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+#petals { transition: opacity 1.2s var(--ease); }
+#petals path {
+  fill: url(#petal-fill);
+  stroke: rgb(255 240 232 / .18);
+  stroke-width: .75;
+  vector-effect: non-scaling-stroke;
+}
+
+#heart {
+  fill: var(--peach);
+  opacity: .55;
+  transition: opacity 1.2s var(--ease);
+}
+
+/* a preview while choosing; a full bloom once a session is chosen */
+body[data-phase="idle"] #petals { opacity: .74; }
+body[data-phase="idle"] #heart  { opacity: .32; }
+
+body[data-phase="paused"] #bloom { animation-play-state: paused; opacity: .34; }
+
+/* ---- presets: the numbers around the flower ---- */
+
+.preset { cursor: pointer; outline: none; transition: opacity .7s var(--ease); }
+.preset .hit { fill: transparent; }
+.preset text {
+  fill: rgb(var(--ink));
+  fill-opacity: .36;
+  font-size: 15px;
+  letter-spacing: .04em;
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-variant-numeric: tabular-nums;
+  transition: fill-opacity .35s var(--ease);
+}
+.preset:hover text,
+.preset:focus-visible text { fill-opacity: .92; }
+
+body:not([data-phase="idle"]) .preset { opacity: 0; pointer-events: none; }
+
+/* ---- countdown and remaining time ---- */
+
+#readout {
+  display: grid;
+  place-items: center;
+  height: 64px;
+  margin-top: -30px;             /* tuck into the space the bottom numbers leave */
+}
+#readout > span { grid-area: 1 / 1; font-variant-numeric: tabular-nums; }
+
+#count {
+  font-size: 38px;
+  color: rgb(var(--ink) / .62);
+  opacity: 0;
+}
+#count.beat { animation: beat 1s var(--ease) both; }
+@keyframes beat {
+  0%   { opacity: 0; transform: scale(.94); }
+  35%  { opacity: 1; transform: scale(1); }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.03); }
+}
+
+#time {
+  font-size: 21px;
+  letter-spacing: .16em;
+  padding-left: .16em;           /* balance the trailing letter-spacing */
+  color: rgb(var(--ink) / .3);
+  opacity: 0;
+  transition: opacity 1.4s var(--ease), color 1s var(--ease);
+}
+body[data-phase="running"] #time,
+body[data-phase="paused"] #time { opacity: 1; }
+body[data-phase="paused"] #time { color: rgb(var(--ink) / .55); }
+
+/* ---- footer: history while idle, the cancel option while paused ---- */
+
+footer {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  align-items: end;
+  height: 128px;
+  padding: 0 16px 34px;
+}
+footer > section {
+  grid-area: 1 / 1;
+  width: min(560px, 100%);
+  transition: opacity 1s var(--ease);
+}
+body:not([data-phase="idle"]) #history { opacity: 0; pointer-events: none; }
+
+#pause {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  visibility: hidden;            /* not focusable while hidden */
+  transition: opacity 1s var(--ease), visibility 0s 1s;
+}
+body[data-phase="paused"] #pause {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 1s var(--ease), visibility 0s;
+}
+#pause p {
+  margin: 0;
+  font-size: 12.5px;
+  letter-spacing: .1em;
+  color: rgb(var(--ink) / .3);
+}
+
+#cancel {
+  font: inherit;
+  font-size: 13.5px;
+  letter-spacing: .14em;
+  color: rgb(var(--ink) / .66);
+  background: transparent;
+  border: 1px solid rgb(var(--ink) / .17);
+  border-radius: 999px;
+  padding: 9px 24px 10px;
+  cursor: pointer;
+  transition: color .3s, border-color .3s, background-color .3s;
+}
+#cancel:hover,
+#cancel:focus-visible {
+  outline: none;
+  color: rgb(var(--ink) / .95);
+  border-color: rgb(var(--ink) / .38);
+  background: rgb(var(--ink) / .04);
+}
+
+/* ---- the last 24 hours ---- */
+
+#history { position: relative; }
+
+#summary {
+  margin: 0 0 14px;
+  text-align: center;
+  font-size: 12.5px;
+  letter-spacing: .1em;
+  color: rgb(var(--ink) / .32);
+}
+
+#export {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: .7em;
+  cursor: pointer;
+  transition: color .3s;
+}
+#export::before { content: "·"; margin-right: .7em; }
+#export:hover,
+#export:focus-visible { outline: none; color: rgb(var(--ink) / .75); }
+#export[hidden] { display: none; }
+
+#track {
+  position: relative;
+  height: 10px;
+  margin-bottom: 22px;
+}
+#track::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 50%;
+  height: 1px;
+  background: rgb(var(--ink) / .08);
+}
+
+.mark {
+  position: absolute;
+  top: 2px;
+  height: 6px;
+  min-width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--lilac), var(--peach));
+  opacity: .62;
+  transform-origin: left center;
+  transition: opacity .3s;
+}
+.mark.cancelled { opacity: .24; }
+.mark:hover { opacity: 1; }
+.mark::after { content: ""; position: absolute; inset: -9px -3px; }  /* easier to hover */
+.mark.fresh { animation: grow 1.6s .2s var(--ease) both; }
+@keyframes grow {
+  from { opacity: 0; transform: scaleX(0); }
+}
+
+.hour {
+  position: absolute;
+  top: 17px;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  color: rgb(var(--ink) / .2);
+}
+.hour::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: -9px;
+  width: 1px; height: 4px;
+  background: rgb(var(--ink) / .12);
+}
+.hour.now { transform: translateX(-100%); }
+.hour.now::before { left: 100%; }
+
+#tip {
+  position: absolute;
+  bottom: 52px;
+  left: 0;
+  transform: translateX(-50%);
+  padding: 6px 11px 7px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--ink) / .08);
+  background: rgb(32 36 48 / .92);
+  font-size: 12px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  color: rgb(var(--ink) / .78);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+}
+#tip.show { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  #bloom { animation: none; }
+}
+</style>
+</head>
+<body data-phase="idle">
+  <main>
+    <svg id="flower" viewBox="-180 -180 360 360" role="group" aria-label="Focus timer">
+      <defs>
+        <linearGradient id="petal-fill" gradientUnits="userSpaceOnUse" x1="0" y1="-14" x2="0" y2="-118">
+          <stop offset="0" stop-color="#a593cf"/>
+          <stop offset=".55" stop-color="#d4b5d0"/>
+          <stop offset="1" stop-color="#f2d4c3"/>
+        </linearGradient>
+        <radialGradient id="halo-fill">
+          <stop offset="0" stop-color="#c2a8d8" stop-opacity=".2"/>
+          <stop offset=".45" stop-color="#c2a8d8" stop-opacity=".06"/>
+          <stop offset="1" stop-color="#c2a8d8" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <g id="bloom">
+        <circle id="halo" r="178" fill="url(#halo-fill)" opacity="0"/>
+        <g id="ghosts"></g>
+        <g id="petals"></g>
+        <circle id="heart" r="4.5"/>
+      </g>
+      <g id="presets"></g>
+    </svg>
+    <div id="readout">
+      <span id="count"></span>
+      <span id="time"></span>
+    </div>
+  </main>
+
+  <footer>
+    <section id="history">
+      <p id="summary"><span id="total"></span><button id="export" type="button" title="Download every session as a .csv file" hidden>export</button></p>
+      <div id="track"></div>
+      <div id="tip" role="tooltip"></div>
+    </section>
+    <section id="pause">
+      <button id="cancel" type="button">cancel</button>
+      <p>paused · click anywhere to resume</p>
+    </section>
+  </footer>
+
+<script>
+/* Twelve petals, one per 5-minute preset, laid out like a clock face. While a
+ * session runs, the lit petals show the time that remains: each petal holds
+ * five minutes and slowly folds back into the heart as its minutes pass. */
+(() => {
+  'use strict';
+
+  const MINUTE = 60_000;
+  const DAY = 24 * 60 * MINUTE;
+  const STEP = 5;              // minutes per petal / preset
+  const PETALS = 12;           // 5, 10 … 60
+  const COUNTDOWN = 3;         // seconds of 3 · 2 · 1 before a session begins
+  const MIN_LOGGED = MINUTE;   // cancelled sessions shorter than this aren't kept
+  const DONE_HOLD = 1800;      // ms the empty flower lingers before the presets return
+  const STORE = 'flower.sessions';
+  const PETAL_D = 'M0,-14 C14,-28 24,-102 0,-118 C-24,-102 -14,-28 0,-14 Z';
+
+  const $ = (sel) => document.querySelector(sel);
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = (tag, attrs = {}) => {
+    const el = document.createElementNS(NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
+
+  const body = document.body;
+  const timeEl = $('#time');
+  const countEl = $('#count');
+  const halo = $('#halo');
+  const faviconEl = $('#favicon');
+  const IDLE_ICON = faviconEl.href;
+
+  /* ---------- build the flower and the dial ---------- */
+
+  const litPetals = [];
+
+  function wedge(deg) {
+    const a0 = ((deg - 15) * Math.PI) / 180, a1 = ((deg + 15) * Math.PI) / 180;
+    const r0 = 18, r1 = 178;
+    const pt = (r, a) => `${(r * Math.sin(a)).toFixed(2)},${(-r * Math.cos(a)).toFixed(2)}`;
+    return `M${pt(r0, a0)} L${pt(r1, a0)} A${r1},${r1} 0 0 1 ${pt(r1, a1)} L${pt(r0, a1)} A${r0},${r0} 0 0 0 ${pt(r0, a0)} Z`;
+  }
+
+  for (let k = 1; k <= PETALS; k++) {
+    const deg = k * 30, rad = (deg * Math.PI) / 180, minutes = k * STEP;
+
+    $('#ghosts').append(svg('path', { d: PETAL_D, transform: `rotate(${deg})` }));
+
+    const holder = svg('g', { transform: `rotate(${deg})` });
+    const petal = svg('path', { d: PETAL_D, opacity: 0 });
+    holder.append(petal);
+    $('#petals').append(holder);
+    litPetals.push(petal);
+
+    const preset = svg('g', {
+      class: 'preset', tabindex: 0, role: 'button',
+      'aria-label': `Focus for ${minutes} minutes`, 'data-minutes': minutes,
+    });
+    const label = svg('text', { x: (152 * Math.sin(rad)).toFixed(2), y: (-152 * Math.cos(rad)).toFixed(2) });
+    label.textContent = minutes;
+    preset.append(svg('path', { class: 'hit', d: wedge(deg) }), label);
+    $('#presets').append(preset);
+
+    const preview = (on) => () => {
+      if (on) S.hover = minutes;
+      else if (S.hover === minutes) S.hover = 0;
+      requestRender();
+    };
+    preset.addEventListener('pointerenter', preview(true));
+    preset.addEventListener('pointerleave', preview(false));
+    preset.addEventListener('focus', preview(true));
+    preset.addEventListener('blur', preview(false));
+  }
+
+  /* ---------- state ---------- */
+
+  const S = {
+    phase: 'idle',     // idle → countdown → running ⇄ paused → done → idle
+    minutes: 0,
+    countdownAt: 0,    // when 3 · 2 · 1 began
+    startAt: 0,        // when focus began
+    pausedMs: 0,       // total time spent paused
+    pauseAt: 0,
+    doneAt: 0,
+    beat: 0,           // countdown numeral on screen
+    hover: 0,          // preset under the pointer while idle
+    justDone: false,   // the tab title says "done" until you come back
+  };
+
+  const durationMs = () => S.minutes * MINUTE;
+  const focusedMs = (now) =>
+    Math.min(durationMs(), Math.max(0, (S.phase === 'paused' ? S.pauseAt : now) - S.startAt - S.pausedMs));
+  const remainingMs = (now) => durationMs() - focusedMs(now);
+  const active = () => S.phase === 'running' || S.phase === 'paused';
+
+  function setPhase(phase) {
+    S.phase = phase;
+    body.dataset.phase = phase;
+    if (phase === 'idle') renderHistory();
+    updateTab(Date.now());
+    requestRender();
+  }
+
+  function start(minutes) {
+    if (S.phase !== 'idle') return;
+    S.minutes = minutes;
+    S.countdownAt = Date.now();
+    S.beat = 0;
+    S.hover = 0;
+    S.justDone = false;
+    timeEl.textContent = clock(durationMs());
+    document.activeElement?.blur?.();
+    setPhase('countdown');
+    update(S.countdownAt);
+  }
+
+  function abortCountdown() {
+    countEl.classList.remove('beat');
+    setPhase('idle');
+  }
+
+  function pause(now) {
+    S.pauseAt = now;
+    setPhase('paused');
+  }
+
+  function resume(now) {
+    S.pausedMs += now - S.pauseAt;
+    setPhase('running');
+  }
+
+  function cancel(now) {
+    const focused = focusedMs(now);
+    if (focused >= MIN_LOGGED) save(record(now, focused, 'cancelled'));
+    setPhase('idle');
+  }
+
+  function complete() {
+    const end = S.startAt + S.pausedMs + durationMs();
+    S.doneAt = Date.now();
+    S.justDone = true;
+    timeEl.textContent = clock(0);
+    save(record(end, durationMs(), 'completed'));
+    setPhase('done');
+  }
+
+  const record = (end, focused, status) => ({
+    start: S.startAt,
+    end,
+    planned_min: S.minutes,
+    focused_min: +(focused / MINUTE).toFixed(2),
+    status,
+  });
+
+  /* ---------- the clock: everything is derived from wall time ---------- */
+
+  function update(now) {
+    if (S.phase === 'countdown') {
+      const n = COUNTDOWN - Math.floor((now - S.countdownAt) / 1000);
+      if (n <= 0) {
+        S.startAt = S.countdownAt + COUNTDOWN * 1000;
+        S.pausedMs = 0;
+        setPhase('running');
+      } else if (n !== S.beat) {
+        S.beat = n;
+        countEl.textContent = n;
+        countEl.classList.remove('beat');
+        void countEl.offsetWidth; // restart the fade
+        countEl.classList.add('beat');
+      }
+    }
+    if (S.phase === 'running' && remainingMs(now) <= 0) complete();
+    if (S.phase === 'done' && now - S.doneAt >= DONE_HOLD) setPhase('idle');
+
+    if (active()) setText(timeEl, clock(remainingMs(now)));
+    if (S.phase === 'idle' && now - historyAt > MINUTE) renderHistory();
+    updateTab(now);
+  }
+
+  // A worker's timer keeps ticking at full rate in a background tab, so the
+  // tab title stays accurate even when the page itself is being throttled.
+  function tick() {
+    update(Date.now());
+    if (S.phase !== 'idle') requestRender();
+  }
+  let fallbackTicker = 0;
+  const tickOnMainThread = () => { fallbackTicker ||= setInterval(tick, 250); };
+  try {
+    const src = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 250)'], { type: 'text/javascript' }));
+    const worker = new Worker(src);
+    worker.onmessage = tick;
+    worker.onerror = tickOnMainThread;
+  } catch {
+    tickOnMainThread();
+  }
+
+  /* ---------- drawing ---------- */
+
+  let shown = 0;       // petals currently drawn (fractional), eased toward the target
+  let raf = 0, lastFrame = 0;
+  const painted = new Array(PETALS).fill(-1);
+
+  function targetPetals(now) {
+    switch (S.phase) {
+      case 'idle': return S.hover / STEP;
+      case 'countdown': return S.minutes / STEP;
+      case 'running':
+      case 'paused': return remainingMs(now) / (STEP * MINUTE);
+      default: return 0;
+    }
+  }
+
+  function requestRender() {
+    if (!raf) raf = requestAnimationFrame(frame);
+  }
+
+  function frame(t) {
+    raf = 0;
+    const now = Date.now();
+    update(now);
+    const target = targetPetals(now);
+    const dt = lastFrame ? Math.min(100, t - lastFrame) : 16;
+    shown += (target - shown) * (1 - Math.exp(-dt / 160));
+    if (Math.abs(target - shown) < 0.002) shown = target;
+    paint(shown);
+    if (shown !== target || S.phase === 'countdown' || S.phase === 'done') {
+      lastFrame = t;
+      requestRender();
+    } else {
+      lastFrame = 0;
+    }
+  }
+
+  function paint(amount) {
+    for (let i = 0; i < PETALS; i++) {
+      const f = Math.round(Math.min(1, Math.max(0, amount - i)) * 5000) / 5000;
+      if (f === painted[i]) continue;
+      painted[i] = f;
+      // the petal shrinks toward the heart as its five minutes pass,
+      // dimming a little, then fades out entirely in its last moments
+      const opacity = (0.42 + 0.58 * f) * Math.min(1, f * 14);
+      litPetals[i].setAttribute('opacity', opacity.toFixed(4));
+      litPetals[i].setAttribute('transform', `scale(${(0.34 + 0.66 * f).toFixed(4)})`);
+    }
+    halo.setAttribute('opacity', (0.35 + 0.65 * Math.min(1, amount / 2)).toFixed(3));
+  }
+
+  /* ---------- the browser tab ---------- */
+
+  let lastTitle = '', lastIcon = '';
+  const iconCanvas = Object.assign(document.createElement('canvas'), { width: 64, height: 64 });
+  let iconKey = '', iconUrl = '';
+
+  function pieIcon(fraction, paused) {
+    const steps = 60, q = Math.ceil(fraction * steps);
+    const key = `${q}${paused ? 'p' : ''}`;
+    if (key === iconKey) return iconUrl;
+    const c = iconCanvas.getContext('2d');
+    c.clearRect(0, 0, 64, 64);
+    c.globalAlpha = paused ? 0.45 : 1;
+    c.beginPath();
+    c.arc(32, 32, 29, 0, Math.PI * 2);
+    c.fillStyle = 'rgba(165, 147, 207, 0.28)';
+    c.fill();
+    if (q > 0) {
+      const g = c.createLinearGradient(32, 60, 32, 4);
+      g.addColorStop(0, '#a593cf');
+      g.addColorStop(1, '#f2d4c3');
+      c.beginPath();
+      c.moveTo(32, 32);
+      c.arc(32, 32, 29, -Math.PI / 2, -Math.PI / 2 + (q / steps) * Math.PI * 2);
+      c.closePath();
+      c.fillStyle = g;
+      c.fill();
+    }
+    iconKey = key;
+    return (iconUrl = iconCanvas.toDataURL('image/png'));
+  }
+
+  function updateTab(now) {
+    let title = 'flower', icon = IDLE_ICON;
+    if (S.phase === 'countdown') {
+      title = `${Math.max(1, S.beat)} · flower`;
+    } else if (active()) {
+      const left = remainingMs(now);
+      title = `${clock(left)} · ${S.phase === 'paused' ? 'paused' : 'flower'}`;
+      icon = pieIcon(left / durationMs(), S.phase === 'paused');
+    } else if (S.justDone) {
+      title = '✓ done · flower';
+    }
+    if (title !== lastTitle) document.title = lastTitle = title;
+    if (icon !== lastIcon) faviconEl.href = lastIcon = icon;
+  }
+
+  function settle() {
+    if (S.justDone && document.visibilityState === 'visible' && S.phase === 'idle') {
+      S.justDone = false;
+      updateTab(Date.now());
+    }
+  }
+  addEventListener('pointermove', settle, { passive: true });
+  addEventListener('keydown', settle);
+
+  /* ---------- input ---------- */
+
+  document.addEventListener('click', (e) => {
+    const now = Date.now();
+    switch (S.phase) {
+      case 'idle': {
+        const preset = e.target.closest?.('.preset');
+        if (preset) start(+preset.dataset.minutes);
+        else if (e.target.closest?.('#export')) exportCsv();
+        break;
+      }
+      case 'countdown':
+        if (now - S.countdownAt > 450) abortCountdown(); // ignore the second half of a double-click
+        break;
+      case 'running':
+        pause(now);
+        break;
+      case 'paused':
+        if (e.target.closest?.('#cancel')) cancel(now);
+        else resume(now);
+        break;
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    const now = Date.now();
+    const go = e.key === ' ' || e.key === 'Enter';
+    switch (S.phase) {
+      case 'idle': {
+        const preset = e.target.closest?.('.preset');
+        if (preset && go) { e.preventDefault(); start(+preset.dataset.minutes); }
+        break;
+      }
+      case 'countdown':
+        if (e.key === 'Escape') abortCountdown();
+        break;
+      case 'running':
+        if (go || e.key === 'Escape') { e.preventDefault(); pause(now); }
+        break;
+      case 'paused':
+        if (e.target.closest?.('button')) return; // let the cancel button be a button
+        if (go) { e.preventDefault(); resume(now); }
+        else if (e.key === 'Escape') cancel(now);
+        break;
+    }
+  });
+
+  // Closing the tab mid-session keeps what was done.
+  addEventListener('pagehide', (e) => {
+    if (e.persisted || !active()) return;
+    const now = Date.now(), focused = focusedMs(now);
+    if (focused >= MIN_LOGGED) addSession(record(now, focused, 'cancelled'));
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    settle();
+    requestRender();
+  });
+
+  /* ---------- sessions: kept in this browser, exportable as CSV ---------- */
+
+  let memorySessions = [];   // used only if the browser blocks storage
+  const readSessions = () => {
+    try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return memorySessions; }
+  };
+  const addSession = (rec) => {
+    memorySessions = [...readSessions(), rec];
+    try { localStorage.setItem(STORE, JSON.stringify(memorySessions)); } catch { /* memory only */ }
+  };
+
+  function save(rec) {
+    freshStart = rec.start;
+    addSession(rec);
+  }
+
+  // another tab finished a session
+  addEventListener('storage', (e) => {
+    if (e.key === STORE && S.phase === 'idle') renderHistory();
+  });
+
+  function exportCsv() {
+    const lines = ['start,end,planned_min,focused_min,status'];
+    for (const s of readSessions()) {
+      lines.push([isoLocal(s.start), isoLocal(s.end), s.planned_min, s.focused_min.toFixed(1), s.status].join(','));
+    }
+    const url = URL.createObjectURL(new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv' }));
+    const a = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `flower-sessions-${isoLocal(Date.now()).slice(0, 10)}.csv`,
+    });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /* ---------- the last 24 hours ---------- */
+
+  const track = $('#track'), total = $('#total'), exportBtn = $('#export'), tip = $('#tip');
+  const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
+  const timeFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+  let historyAt = 0;
+  let freshStart = 0;    // the session just finished, which grows in gently
+
+  function renderHistory() {
+    const now = Date.now(), from = now - DAY;
+    historyAt = now;
+    const all = readSessions();
+    const list = all.filter((s) => s.end > from).sort((a, b) => a.start - b.start);
+    const minutes = list.reduce((sum, s) => sum + s.focused_min, 0);
+    total.textContent = list.length
+      ? `${span(minutes)} in the last 24 hours`
+      : 'no sessions in the last 24 hours';
+    exportBtn.hidden = !all.length;
+
+    const nodes = [];
+    const t = new Date(from);
+    t.setMinutes(60, 0, 0); // the next full hour
+    for (; +t < now; t.setHours(t.getHours() + 1)) {
+      const x = (t - from) / DAY;
+      if (t.getHours() % 6 || x > 0.92) continue;
+      const label = document.createElement('span');
+      label.className = 'hour';
+      label.style.left = `${x * 100}%`;
+      label.textContent = hourFmt.format(t).toLowerCase();
+      nodes.push(label);
+    }
+    const nowLabel = document.createElement('span');
+    nowLabel.className = 'hour now';
+    nowLabel.style.left = '100%';
+    nowLabel.textContent = 'now';
+    nodes.push(nowLabel);
+
+    for (const s of list) {
+      const a = Math.max(s.start, from), b = Math.min(s.end, now);
+      const mark = document.createElement('span');
+      mark.className = `mark${s.status === 'completed' ? '' : ' cancelled'}`;
+      if (freshStart && s.start === freshStart) {
+        mark.classList.add('fresh');
+        freshStart = 0;
+      }
+      mark.style.left = `${((a - from) / DAY) * 100}%`;
+      mark.style.width = `${((b - a) / DAY) * 100}%`;
+      const what = s.status === 'completed'
+        ? `${s.planned_min} min`
+        : `${Math.round(s.focused_min)} of ${s.planned_min} min`;
+      mark.dataset.tip = `${timeFmt.formatRange(new Date(s.start), new Date(s.end))} · ${what}`;
+      mark.setAttribute('aria-label', mark.dataset.tip);
+      nodes.push(mark);
+    }
+    track.replaceChildren(...nodes);
+  }
+
+  track.addEventListener('pointerover', (e) => {
+    const mark = e.target.closest('.mark');
+    if (!mark) return;
+    tip.textContent = mark.dataset.tip;
+    const box = track.getBoundingClientRect(), m = mark.getBoundingClientRect();
+    const half = tip.offsetWidth / 2;
+    const x = Math.min(box.width - half, Math.max(half, m.left + m.width / 2 - box.left));
+    tip.style.left = `${x}px`;
+    tip.classList.add('show');
+  });
+  track.addEventListener('pointerout', (e) => {
+    if (!e.relatedTarget?.closest?.('.mark')) tip.classList.remove('show');
+  });
+
+  /* ---------- formatting ---------- */
+
+  function clock(ms) {
+    const s = Math.ceil(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function span(minutes) {
+    const m = Math.round(minutes);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? `${h} h ${r} min` : `${h} h`;
+  }
+
+  // local time with its UTC offset, e.g. 2026-11-06T14:05:12-07:00
+  function isoLocal(ms) {
+    const d = new Date(ms), off = -d.getTimezoneOffset();
+    const p = (n) => String(Math.abs(n)).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+      `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` +
+      `${off < 0 ? '-' : '+'}${p(Math.trunc(off / 60))}:${p(off % 60)}`;
+  }
+
+  function setText(el, text) {
+    if (el.textContent !== text) el.textContent = text;
+  }
+
+  /* ---------- go ---------- */
+
+  renderHistory();
+  requestRender();
+})();
+</script>
+</body>
+</html>
