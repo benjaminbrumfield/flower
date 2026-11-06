@@ -2,7 +2,7 @@
 <!--
   flower: a quiet focus timer in one file. Open it straight from disk; no server.
   Sessions are kept in this browser's local storage ("flower.sessions") and can be
-  downloaded as a CSV with the "export" link under the 24-hour strip.
+  downloaded as a CSV with the "export" link under the 8-hour strip.
 -->
 <html lang="en">
 <head>
@@ -15,8 +15,6 @@
 <style>
 :root {
   --bg: #1b1f29;
-  --bg-glow: #222735;
-  --bg-edge: #161921;
   --ink: 214 218 230;            /* rgb channels, used with alpha */
   --lilac: #a593cf;
   --peach: #f2d4c3;
@@ -32,7 +30,6 @@ body {
   flex-direction: column;
   overflow: hidden;
   background-color: var(--bg);
-  background-image: radial-gradient(ellipse 80% 70% at 50% 40%, var(--bg-glow) 0%, var(--bg) 55%, var(--bg-edge) 100%);
   color: rgb(var(--ink));
   font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-weight: 300;
@@ -73,6 +70,17 @@ main {
   stroke: rgb(var(--ink) / .085);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  transition: fill .9s var(--ease), stroke .9s var(--ease);
+}
+/* during a session, the outline of the chosen length stays behind the lit petals */
+body:not([data-phase="idle"]) #ghosts path.chosen {
+  fill: rgb(var(--ink) / .06);
+  stroke: rgb(var(--ink) / .42);
+}
+/* …and the petals outside it recede */
+body:not([data-phase="idle"]) #ghosts path:not(.chosen) {
+  fill: rgb(var(--ink) / .01);
+  stroke: rgb(var(--ink) / .04);
 }
 
 #petals { transition: opacity 1.2s var(--ease); }
@@ -207,7 +215,7 @@ body[data-phase="paused"] #pause {
   background: rgb(var(--ink) / .04);
 }
 
-/* ---- the last 24 hours ---- */
+/* ---- the last 8 hours ---- */
 
 #history { position: relative; }
 
@@ -319,14 +327,8 @@ body[data-phase="paused"] #pause {
           <stop offset=".55" stop-color="#d4b5d0"/>
           <stop offset="1" stop-color="#f2d4c3"/>
         </linearGradient>
-        <radialGradient id="halo-fill">
-          <stop offset="0" stop-color="#c2a8d8" stop-opacity=".2"/>
-          <stop offset=".45" stop-color="#c2a8d8" stop-opacity=".06"/>
-          <stop offset="1" stop-color="#c2a8d8" stop-opacity="0"/>
-        </radialGradient>
       </defs>
       <g id="bloom">
-        <circle id="halo" r="178" fill="url(#halo-fill)" opacity="0"/>
         <g id="ghosts"></g>
         <g id="petals"></g>
         <circle id="heart" r="4.5"/>
@@ -359,7 +361,9 @@ body[data-phase="paused"] #pause {
   'use strict';
 
   const MINUTE = 60_000;
-  const DAY = 24 * 60 * MINUTE;
+  const SPAN_HOURS = 8;        // how far back the history strip reaches
+  const SPAN = SPAN_HOURS * 60 * MINUTE;
+  const LABEL_EVERY = 2;       // hours between the strip's time labels
   const STEP = 5;              // minutes per petal / preset
   const PETALS = 12;           // 5, 10 … 60
   const COUNTDOWN = 3;         // seconds of 3 · 2 · 1 before a session begins
@@ -379,13 +383,12 @@ body[data-phase="paused"] #pause {
   const body = document.body;
   const timeEl = $('#time');
   const countEl = $('#count');
-  const halo = $('#halo');
   const faviconEl = $('#favicon');
   const IDLE_ICON = faviconEl.href;
 
   /* ---------- build the flower and the dial ---------- */
 
-  const litPetals = [];
+  const litPetals = [], ghostPetals = [];
 
   function wedge(deg) {
     const a0 = ((deg - 15) * Math.PI) / 180, a1 = ((deg + 15) * Math.PI) / 180;
@@ -397,7 +400,9 @@ body[data-phase="paused"] #pause {
   for (let k = 1; k <= PETALS; k++) {
     const deg = k * 30, rad = (deg * Math.PI) / 180, minutes = k * STEP;
 
-    $('#ghosts').append(svg('path', { d: PETAL_D, transform: `rotate(${deg})` }));
+    const ghost = svg('path', { d: PETAL_D, transform: `rotate(${deg})` });
+    $('#ghosts').append(ghost);
+    ghostPetals.push(ghost);
 
     const holder = svg('g', { transform: `rotate(${deg})` });
     const petal = svg('path', { d: PETAL_D, opacity: 0 });
@@ -462,9 +467,18 @@ body[data-phase="paused"] #pause {
     S.hover = 0;
     S.justDone = false;
     timeEl.textContent = clock(durationMs());
+    markChoice(minutes);
     document.activeElement?.blur?.();
     setPhase('countdown');
     update(S.countdownAt);
+  }
+
+  // The chosen length stays visible for the whole session as brighter petal
+  // outlines. (CSS shows them only outside the idle phase.)
+  function markChoice(minutes) {
+    for (let i = 0; i < PETALS; i++) {
+      ghostPetals[i].classList.toggle('chosen', i < minutes / STEP);
+    }
   }
 
   function abortCountdown() {
@@ -595,7 +609,6 @@ body[data-phase="paused"] #pause {
       litPetals[i].setAttribute('opacity', opacity.toFixed(4));
       litPetals[i].setAttribute('transform', `scale(${(0.34 + 0.66 * f).toFixed(4)})`);
     }
-    halo.setAttribute('opacity', (0.35 + 0.65 * Math.min(1, amount / 2)).toFixed(3));
   }
 
   /* ---------- the browser tab ---------- */
@@ -752,7 +765,7 @@ body[data-phase="paused"] #pause {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  /* ---------- the last 24 hours ---------- */
+  /* ---------- the last few hours ---------- */
 
   const track = $('#track'), total = $('#total'), exportBtn = $('#export'), tip = $('#tip');
   const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
@@ -761,22 +774,22 @@ body[data-phase="paused"] #pause {
   let freshStart = 0;    // the session just finished, which grows in gently
 
   function renderHistory() {
-    const now = Date.now(), from = now - DAY;
+    const now = Date.now(), from = now - SPAN;
     historyAt = now;
     const all = readSessions();
     const list = all.filter((s) => s.end > from).sort((a, b) => a.start - b.start);
     const minutes = list.reduce((sum, s) => sum + s.focused_min, 0);
     total.textContent = list.length
-      ? `${span(minutes)} in the last 24 hours`
-      : 'no sessions in the last 24 hours';
+      ? `${span(minutes)} in the last ${SPAN_HOURS} hours`
+      : `no sessions in the last ${SPAN_HOURS} hours`;
     exportBtn.hidden = !all.length;
 
     const nodes = [];
     const t = new Date(from);
     t.setMinutes(60, 0, 0); // the next full hour
     for (; +t < now; t.setHours(t.getHours() + 1)) {
-      const x = (t - from) / DAY;
-      if (t.getHours() % 6 || x > 0.92) continue;
+      const x = (t - from) / SPAN;
+      if (t.getHours() % LABEL_EVERY || x > 0.92) continue;
       const label = document.createElement('span');
       label.className = 'hour';
       label.style.left = `${x * 100}%`;
@@ -797,8 +810,8 @@ body[data-phase="paused"] #pause {
         mark.classList.add('fresh');
         freshStart = 0;
       }
-      mark.style.left = `${((a - from) / DAY) * 100}%`;
-      mark.style.width = `${((b - a) / DAY) * 100}%`;
+      mark.style.left = `${((a - from) / SPAN) * 100}%`;
+      mark.style.width = `${((b - a) / SPAN) * 100}%`;
       const what = s.status === 'completed'
         ? `${s.planned_min} min`
         : `${Math.round(s.focused_min)} of ${s.planned_min} min`;
