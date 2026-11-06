@@ -154,10 +154,13 @@ body:not([data-phase="idle"]) .preset { opacity: 0; pointer-events: none; }
   transition: opacity 1.4s var(--ease), color 1s var(--ease);
 }
 body[data-phase="running"] #time,
-body[data-phase="paused"] #time { opacity: 1; }
-body[data-phase="paused"] #time { color: rgb(var(--ink) / .55); }
+body[data-phase="paused"] #time,
+body[data-phase="done"] #time { opacity: 1; }
+body[data-phase="paused"] #time,
+body[data-phase="done"] #time { color: rgb(var(--ink) / .55); }
 
-/* ---- footer: history while idle, the cancel option while paused ---- */
+/* ---- footer: history while idle, the cancel option while paused,
+        the finishing time once done ---- */
 
 footer {
   flex: none;
@@ -174,7 +177,8 @@ footer > section {
 }
 body:not([data-phase="idle"]) #history { opacity: 0; pointer-events: none; }
 
-#pause {
+#pause,
+#done {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -183,16 +187,24 @@ body:not([data-phase="idle"]) #history { opacity: 0; pointer-events: none; }
   visibility: hidden;            /* not focusable while hidden */
   transition: opacity 1s var(--ease), visibility 0s 1s;
 }
-body[data-phase="paused"] #pause {
+body[data-phase="paused"] #pause,
+body[data-phase="done"] #done {
   opacity: 1;
   visibility: visible;
   transition: opacity 1s var(--ease), visibility 0s;
 }
-#pause p {
+#pause p,
+#done p {
   margin: 0;
   font-size: 12.5px;
   letter-spacing: .1em;
   color: rgb(var(--ink) / .3);
+}
+#done #finished {
+  font-size: 13.5px;
+  letter-spacing: .14em;
+  color: rgb(var(--ink) / .66);
+  font-variant-numeric: tabular-nums;
 }
 
 #cancel {
@@ -351,6 +363,10 @@ body[data-phase="paused"] #pause {
       <button id="cancel" type="button">cancel</button>
       <p>paused · click anywhere to resume</p>
     </section>
+    <section id="done">
+      <p id="finished"></p>
+      <p>click anywhere to continue</p>
+    </section>
   </footer>
 
 <script>
@@ -368,7 +384,7 @@ body[data-phase="paused"] #pause {
   const PETALS = 12;           // 5, 10 … 60
   const COUNTDOWN = 3;         // seconds of 3 · 2 · 1 before a session begins
   const MIN_LOGGED = MINUTE;   // cancelled sessions shorter than this aren't kept
-  const DONE_HOLD = 1800;      // ms the empty flower lingers before the presets return
+  const DONE_GRACE = 600;      // ms after finishing when clicks are ignored, so one meant to pause doesn't skip the finished view
   const STORE = 'flower.sessions';
   const PETAL_D = 'M0,-14 C14,-28 24,-102 0,-118 C-24,-102 -14,-28 0,-14 Z';
 
@@ -383,6 +399,8 @@ body[data-phase="paused"] #pause {
   const body = document.body;
   const timeEl = $('#time');
   const countEl = $('#count');
+  const finishedEl = $('#finished');
+  const finishFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   const faviconEl = $('#favicon');
   const IDLE_ICON = faviconEl.href;
 
@@ -442,7 +460,6 @@ body[data-phase="paused"] #pause {
     doneAt: 0,
     beat: 0,           // countdown numeral on screen
     hover: 0,          // preset under the pointer while idle
-    justDone: false,   // the tab title says "done" until you come back
   };
 
   const durationMs = () => S.minutes * MINUTE;
@@ -465,7 +482,6 @@ body[data-phase="paused"] #pause {
     S.countdownAt = Date.now();
     S.beat = 0;
     S.hover = 0;
-    S.justDone = false;
     timeEl.textContent = clock(durationMs());
     markChoice(minutes);
     document.activeElement?.blur?.();
@@ -502,13 +518,19 @@ body[data-phase="paused"] #pause {
     setPhase('idle');
   }
 
+  // The finished view stays up, showing 0:00 and when time ran out, until
+  // you click or press a key to go back to the presets.
   function complete() {
     const end = S.startAt + S.pausedMs + durationMs();
     S.doneAt = Date.now();
-    S.justDone = true;
     timeEl.textContent = clock(0);
+    finishedEl.textContent = `finished at ${finishFmt.format(end).toLowerCase()}`;
     save(record(end, durationMs(), 'completed'));
     setPhase('done');
+  }
+
+  function dismiss(now) {
+    if (now - S.doneAt > DONE_GRACE) setPhase('idle');
   }
 
   const record = (end, focused, status) => ({
@@ -537,7 +559,6 @@ body[data-phase="paused"] #pause {
       }
     }
     if (S.phase === 'running' && remainingMs(now) <= 0) complete();
-    if (S.phase === 'done' && now - S.doneAt >= DONE_HOLD) setPhase('idle');
 
     if (active()) setText(timeEl, clock(remainingMs(now)));
     if (S.phase === 'idle' && now - historyAt > MINUTE) renderHistory();
@@ -548,7 +569,7 @@ body[data-phase="paused"] #pause {
   // tab title stays accurate even when the page itself is being throttled.
   function tick() {
     update(Date.now());
-    if (S.phase !== 'idle') requestRender();
+    if (S.phase === 'countdown' || active()) requestRender();
   }
   let fallbackTicker = 0;
   const tickOnMainThread = () => { fallbackTicker ||= setInterval(tick, 250); };
@@ -590,7 +611,7 @@ body[data-phase="paused"] #pause {
     shown += (target - shown) * (1 - Math.exp(-dt / 160));
     if (Math.abs(target - shown) < 0.002) shown = target;
     paint(shown);
-    if (shown !== target || S.phase === 'countdown' || S.phase === 'done') {
+    if (shown !== target || S.phase === 'countdown') {
       lastFrame = t;
       requestRender();
     } else {
@@ -651,21 +672,12 @@ body[data-phase="paused"] #pause {
       const left = remainingMs(now);
       title = `${clock(left)} · ${S.phase === 'paused' ? 'paused' : 'flower'}`;
       icon = pieIcon(left / durationMs(), S.phase === 'paused');
-    } else if (S.justDone) {
+    } else if (S.phase === 'done') {
       title = '✓ done · flower';
     }
     if (title !== lastTitle) document.title = lastTitle = title;
     if (icon !== lastIcon) faviconEl.href = lastIcon = icon;
   }
-
-  function settle() {
-    if (S.justDone && document.visibilityState === 'visible' && S.phase === 'idle') {
-      S.justDone = false;
-      updateTab(Date.now());
-    }
-  }
-  addEventListener('pointermove', settle, { passive: true });
-  addEventListener('keydown', settle);
 
   /* ---------- input ---------- */
 
@@ -687,6 +699,9 @@ body[data-phase="paused"] #pause {
       case 'paused':
         if (e.target.closest?.('#cancel')) cancel(now);
         else resume(now);
+        break;
+      case 'done':
+        dismiss(now);
         break;
     }
   });
@@ -712,6 +727,9 @@ body[data-phase="paused"] #pause {
         if (go) { e.preventDefault(); resume(now); }
         else if (e.key === 'Escape') cancel(now);
         break;
+      case 'done':
+        if (go || e.key === 'Escape') { e.preventDefault(); dismiss(now); }
+        break;
     }
   });
 
@@ -724,7 +742,6 @@ body[data-phase="paused"] #pause {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    settle();
     requestRender();
   });
 
