@@ -2,24 +2,84 @@
 <!--
   flower: a quiet focus timer in one file. Open it straight from disk; no server.
   Sessions are kept in this browser's local storage ("flower.sessions") and can be
-  downloaded as a CSV with the "export" link under the 8-hour strip.
+  downloaded as a CSV with the "export" link above the 8-hour strip.
+  Each time the dial comes back it wears one of three looks, picked at random:
+  Line, Lantern or Tone (Tone in one of four colours). Their fonts come from
+  Google Fonts; offline, each look falls back to a system font.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#1b1f29">
+<meta name="theme-color" content="#111214">
 <title>flower</title>
-<link rel="icon" id="favicon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-32 -32 64 64'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='-4' x2='0' y2='-30'><stop offset='0' stop-color='%23a593cf'/><stop offset='1' stop-color='%23f2d4c3'/></linearGradient><path id='p' d='M0,-4 C7,-9 11,-25 0,-30 C-11,-25 -7,-9 0,-4 Z'/></defs><g fill='url(%23g)'><use href='%23p'/><use href='%23p' transform='rotate(60)'/><use href='%23p' transform='rotate(120)'/><use href='%23p' transform='rotate(180)'/><use href='%23p' transform='rotate(240)'/><use href='%23p' transform='rotate(300)'/></g></svg>">
+<link rel="icon" id="favicon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-32 -32 64 64'><defs><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='-4' x2='0' y2='-30'><stop offset='0' stop-color='%23c48a48'/><stop offset='1' stop-color='%23f0b46a'/></linearGradient><path id='p' d='M0,-4 C7,-9 11,-25 0,-30 C-11,-25 -7,-9 0,-4 Z'/></defs><g fill='url(%23g)'><use href='%23p'/><use href='%23p' transform='rotate(60)'/><use href='%23p' transform='rotate(120)'/><use href='%23p' transform='rotate(180)'/><use href='%23p' transform='rotate(240)'/><use href='%23p' transform='rotate(300)'/></g></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,400&family=IBM+Plex+Mono:wght@300;400&family=Space+Grotesk:wght@300;400;500&display=swap" media="print" onload="this.media='all'">
 <style>
 :root {
-  --bg: #1b1f29;
-  --ink: 214 218 230;            /* rgb channels, used with alpha */
-  --lilac: #a593cf;
-  --peach: #f2d4c3;
   --ease: cubic-bezier(.4, 0, .2, 1);
 }
+
+/* ---- the looks: one is picked at random each time the dial comes back ---- */
+
+/* Line: each petal is one drawn stroke that unwinds as its minutes pass */
+body[data-look="line"] {
+  --bg: #111214;
+  --ink: #ECE7DD;
+  --muted: #8C877E;
+  --hair: #2A2B2F;             /* the history strip's baseline and ticks */
+  --tip: #1C1D21;
+  --idle-petals: .75;          /* the preview while choosing */
+  --ghost: .14;                /* petal outlines: idle, chosen, set aside */
+  --ghost-on: .32;
+  --ghost-off: .06;
+  --icon-a: #C48A48;           /* tab icon, petal base → tip */
+  --icon-b: #F0B46A;
+  font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  font-weight: 300;
+}
+
+/* Lantern: slender flame petals with a soft halo that flickers slowly */
+body[data-look="lantern"] {
+  --bg: #0C0B10;
+  --ink: #F3DDBF;
+  --muted: #9A8E80;
+  --time-run: #A89A8A;
+  --hair: rgb(255 184 105 / .12);
+  --tip: #18141A;
+  --idle-petals: .7;
+  --ghost: .09;
+  --ghost-on: .24;
+  --ghost-off: .035;
+  --icon-a: #FF8F45;
+  --icon-b: #FFE6BC;
+  font-family: "Cormorant Garamond", Garamond, Georgia, serif;
+  font-weight: 500;
+}
+
+/* Tone: a colour field, round daisy petals tone on tone, a big quiet clock */
+body[data-look="tone"] {
+  --hair: rgb(0 0 0 / .2);
+  --tip: color-mix(in srgb, var(--bg), #000 32%);
+  --idle-petals: .9;
+  --ghost: .11;
+  --ghost-on: .22;
+  --ghost-off: .05;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 400;
+}
+/* one ground colour; everything else is a pale tone of it */
+body[data-palette="moss"] { --bg: #3F5B4A; --lit: #DDE7D0; --muted: #CAD5C3; --ink: #F1F5EC; --icon-a: #6E9079; --icon-b: #DDE7D0; }
+body[data-palette="clay"] { --bg: #7A3F2E; --lit: #F2D6C6; --muted: #E9C9B8; --ink: #FBEFE8; --icon-a: #B8664C; --icon-b: #F2D6C6; }
+body[data-palette="dusk"] { --bg: #2F3E63; --lit: #D3DBF0; --muted: #C2CBE3; --ink: #EEF1FA; --icon-a: #6276AC; --icon-b: #D3DBF0; }
+body[data-palette="plum"] { --bg: #553049; --lit: #EDD3E2; --muted: #E2C6D7; --ink: #F8ECF3; --icon-a: #9A5F86; --icon-b: #EDD3E2; }
+
+/* changing looks crossfades the whole page */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: .8s; }
 
 * { box-sizing: border-box; }
 
@@ -30,9 +90,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   background-color: var(--bg);
-  color: rgb(var(--ink));
-  font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  font-weight: 300;
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -60,65 +118,101 @@ main {
   animation: breathe 10s ease-in-out infinite;
   transition: opacity 1.4s var(--ease);
 }
+body[data-look="line"] #bloom { animation: none; }   /* Line holds still */
 @keyframes breathe {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.022); }
 }
+body[data-phase="paused"] #bloom { animation-play-state: paused; opacity: .34; }
 
+/* all twelve petals, faintly; during a session the chosen length stays
+   stronger behind the lit petals and the rest recede */
 #ghosts path {
-  fill: rgb(var(--ink) / .022);
-  stroke: rgb(var(--ink) / .085);
+  fill-opacity: var(--ghost);
+  stroke-opacity: var(--ghost);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
-  transition: fill .9s var(--ease), stroke .9s var(--ease);
+  transition: fill-opacity .9s var(--ease), stroke-opacity .9s var(--ease);
 }
-/* during a session, the outline of the chosen length stays behind the lit petals */
 body:not([data-phase="idle"]) #ghosts path.chosen {
-  fill: rgb(var(--ink) / .06);
-  stroke: rgb(var(--ink) / .42);
+  fill-opacity: var(--ghost-on);
+  stroke-opacity: var(--ghost-on);
 }
-/* …and the petals outside it recede */
 body:not([data-phase="idle"]) #ghosts path:not(.chosen) {
-  fill: rgb(var(--ink) / .01);
-  stroke: rgb(var(--ink) / .04);
+  fill-opacity: var(--ghost-off);
+  stroke-opacity: var(--ghost-off);
+}
+body[data-look="line"] #ghosts path    { fill: none; stroke: var(--ink); }
+body[data-look="lantern"] #ghosts path { fill: none; stroke: #FFB869; }
+body[data-look="tone"] #ghosts path    { fill: #000; stroke: none; }
+
+/* the lit petals: a preview while choosing, a full bloom once a session is chosen */
+#petals,
+#halo { transition: opacity 1.2s var(--ease); }
+body[data-phase="idle"] #petals,
+body[data-phase="idle"] #halo { opacity: var(--idle-petals); }
+
+body[data-look="line"] #petals path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.3;           /* scales with the flower, so the dash lengths stay true */
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: var(--dash) var(--dash);
+  transition: stroke .6s;
+}
+/* the petal now counting down is the one amber line */
+body[data-look="line"]:is([data-phase="running"], [data-phase="paused"]) #petals path.partial { stroke: #F0B46A; }
+body[data-look="lantern"] #petals path { fill: url(#lantern-fill); }
+body[data-look="tone"] #petals path    { fill: var(--lit); }
+
+/* Lantern's glow: a blurred copy of the lit petals behind them */
+#halo { display: none; }
+body[data-look="lantern"] #halo { display: inline; }
+#halo path   { fill: #FF9A4D; }
+#halo circle { fill: #FFD9A8; }
+.flicker { opacity: .65; animation: flicker 7s ease-in-out infinite; }
+body[data-phase="paused"] .flicker { animation-play-state: paused; }
+@keyframes flicker {
+  0%, 100% { opacity: .55; }
+  35%      { opacity: .78; }
+  60%      { opacity: .6; }
+  80%      { opacity: .7; }
 }
 
-#petals { transition: opacity 1.2s var(--ease); }
-#petals path {
-  fill: url(#petal-fill);
-  stroke: rgb(255 240 232 / .18);
-  stroke-width: .75;
+body[data-look="line"] #heart {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  opacity: .6;
 }
-
-#heart {
-  fill: var(--peach);
-  opacity: .55;
-  transition: opacity 1.2s var(--ease);
-}
-
-/* a preview while choosing; a full bloom once a session is chosen */
-body[data-phase="idle"] #petals { opacity: .74; }
-body[data-phase="idle"] #heart  { opacity: .32; }
-
-body[data-phase="paused"] #bloom { animation-play-state: paused; opacity: .34; }
+body[data-look="lantern"] #heart { fill: #FFF4E2; }
+body[data-look="tone"] #heart    { fill: var(--lit); }
 
 /* ---- presets: the numbers around the flower ---- */
 
 .preset { cursor: pointer; outline: none; transition: opacity .7s var(--ease); }
 .preset .hit { fill: transparent; }
 .preset text {
-  fill: rgb(var(--ink));
-  fill-opacity: .36;
-  font-size: 15px;
-  letter-spacing: .04em;
+  fill: var(--muted);
   text-anchor: middle;
   dominant-baseline: central;
   font-variant-numeric: tabular-nums;
-  transition: fill-opacity .35s var(--ease);
+  transition: fill .35s var(--ease), fill-opacity .35s var(--ease);
 }
 .preset:hover text,
-.preset:focus-visible text { fill-opacity: .92; }
+.preset:focus-visible text { fill: var(--ink); }
+
+body[data-look="line"] .preset text { font-size: 11px; font-weight: 400; letter-spacing: .08em; }
+
+body[data-look="lantern"] .preset text { font-size: 17px; font-weight: 500; }
+body[data-look="lantern"] .preset:hover text,
+body[data-look="lantern"] .preset:focus-visible text { fill: #FBE9D0; filter: url(#ember); }
+
+body[data-look="tone"] .preset text { font-size: 12.5px; font-weight: 500; fill: var(--ink); fill-opacity: .78; }
+body[data-look="tone"] .preset:hover text,
+body[data-look="tone"] .preset:focus-visible text { fill-opacity: 1; }
 
 body:not([data-phase="idle"]) .preset { opacity: 0; pointer-events: none; }
 
@@ -126,15 +220,16 @@ body:not([data-phase="idle"]) .preset { opacity: 0; pointer-events: none; }
 
 #readout {
   display: grid;
-  place-items: center;
-  height: 64px;
-  margin-top: -30px;             /* tuck into the space the bottom numbers leave */
+  place-items: center;         /* tucked into the space the bottom numbers leave */
 }
-#readout > span { grid-area: 1 / 1; font-variant-numeric: tabular-nums; }
+#readout > span {
+  grid-area: 1 / 1;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
 
 #count {
-  font-size: 38px;
-  color: rgb(var(--ink) / .62);
+  color: var(--muted);
   opacity: 0;
 }
 #count.beat { animation: beat 1s var(--ease) both; }
@@ -146,18 +241,26 @@ body:not([data-phase="idle"]) .preset { opacity: 0; pointer-events: none; }
 }
 
 #time {
-  font-size: 21px;
-  letter-spacing: .16em;
-  padding-left: .16em;           /* balance the trailing letter-spacing */
-  color: rgb(var(--ink) / .3);
+  color: var(--ink);
   opacity: 0;
   transition: opacity 1.4s var(--ease), color 1s var(--ease);
 }
-body[data-phase="running"] #time,
-body[data-phase="paused"] #time,
-body[data-phase="done"] #time { opacity: 1; }
-body[data-phase="paused"] #time,
-body[data-phase="done"] #time { color: rgb(var(--ink) / .55); }
+body[data-phase="running"] #time { color: var(--time-run, var(--muted)); }
+body:is([data-phase="running"], [data-phase="paused"], [data-phase="done"]) #time { opacity: 1; }
+
+body[data-look="line"] #readout { height: 64px; margin-top: -22px; }
+body[data-look="line"] #readout > span { font-size: 24px; letter-spacing: .24em; padding-left: .24em; }
+
+body[data-look="lantern"] #readout { height: 76px; margin-top: -26px; }
+body[data-look="lantern"] #readout > span {
+  font-size: 58px;
+  font-weight: 300;
+  font-variant-numeric: lining-nums tabular-nums;
+  text-shadow: 0 0 28px rgb(255 170 90 / .35);
+}
+
+body[data-look="tone"] #readout { height: 88px; margin-top: -22px; }
+body[data-look="tone"] #readout > span { font-size: 78px; font-weight: 300; letter-spacing: -.02em; }
 
 /* ---- footer: history while idle, the cancel option while paused,
         the finishing time once done ---- */
@@ -167,8 +270,9 @@ footer {
   display: grid;
   justify-items: center;
   align-items: end;
-  height: 128px;
+  height: 132px;
   padding: 0 16px 34px;
+  color: var(--muted);
 }
 footer > section {
   grid-area: 1 / 1;
@@ -182,7 +286,7 @@ body:not([data-phase="idle"]) #history { opacity: 0; pointer-events: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   opacity: 0;
   visibility: hidden;            /* not focusable while hidden */
   transition: opacity 1s var(--ease), visibility 0s 1s;
@@ -194,65 +298,65 @@ body[data-phase="done"] #done {
   transition: opacity 1s var(--ease), visibility 0s;
 }
 #pause p,
-#done p {
-  margin: 0;
-  font-size: 12.5px;
-  letter-spacing: .1em;
-  color: rgb(var(--ink) / .3);
-}
+#done p { margin: 0; }
 #done #finished {
-  font-size: 13.5px;
-  letter-spacing: .14em;
-  color: rgb(var(--ink) / .66);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
 #cancel {
   font: inherit;
-  font-size: 13.5px;
-  letter-spacing: .14em;
-  color: rgb(var(--ink) / .66);
+  letter-spacing: inherit;
+  text-transform: inherit;
+  min-height: 44px;
+  color: var(--ink);
   background: transparent;
-  border: 1px solid rgb(var(--ink) / .17);
-  border-radius: 999px;
-  padding: 9px 24px 10px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: color .3s, border-color .3s, background-color .3s;
+  transition: border-color .3s, background-color .3s;
 }
-#cancel:hover,
-#cancel:focus-visible {
-  outline: none;
-  color: rgb(var(--ink) / .95);
-  border-color: rgb(var(--ink) / .38);
-  background: rgb(var(--ink) / .04);
-}
+#cancel:focus-visible { outline: none; }
+
+body[data-look="line"] footer { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+body[data-look="line"] #cancel { padding: 0 24px; border-color: #3A3B3F; border-radius: 2px; }
+body[data-look="line"] #cancel:is(:hover, :focus-visible) { border-color: var(--ink); }
+
+body[data-look="lantern"] footer { font-size: 17px; font-style: italic; font-weight: 400; }
+body[data-look="lantern"] #summary { font-size: 18px; }
+body[data-look="lantern"] #cancel { padding: 0 28px; border-color: rgb(255 184 105 / .3); border-radius: 999px; font-size: 19px; }
+body[data-look="lantern"] #cancel:is(:hover, :focus-visible) { border-color: #FFB869; }
+body[data-look="lantern"] #done #finished { font-size: 20px; font-style: normal; font-weight: 500; }
+
+body[data-look="tone"] footer { font-size: 13px; letter-spacing: .03em; }
+body[data-look="tone"] #cancel { padding: 0 26px; border: 0; border-radius: 999px; background: rgb(0 0 0 / .18); font-weight: 500; }
+body[data-look="tone"] #cancel:is(:hover, :focus-visible) { background: rgb(0 0 0 / .28); }
+body[data-look="tone"] #done #finished { font-size: 15px; font-weight: 500; }
 
 /* ---- the last 8 hours ---- */
 
 #history { position: relative; }
 
 #summary {
-  margin: 0 0 14px;
+  margin: 0 0 15px;
   text-align: center;
-  font-size: 12.5px;
-  letter-spacing: .1em;
-  color: rgb(var(--ink) / .32);
 }
 
 #export {
   font: inherit;
   letter-spacing: inherit;
+  text-transform: inherit;
   color: inherit;
   background: none;
   border: 0;
   padding: 0;
-  margin-left: .7em;
+  margin-left: .6em;
   cursor: pointer;
   transition: color .3s;
 }
-#export::before { content: "·"; margin-right: .7em; }
+#export::before { content: "·"; margin-right: .6em; }
 #export:hover,
-#export:focus-visible { outline: none; color: rgb(var(--ink) / .75); }
+#export:focus-visible { outline: none; color: var(--ink); }
+body[data-look="tone"] #export:is(:hover, :focus-visible) { text-decoration: underline; text-underline-offset: 3px; }
 #export[hidden] { display: none; }
 
 #track {
@@ -265,46 +369,48 @@ body[data-phase="done"] #done {
   position: absolute;
   left: 0; right: 0; top: 50%;
   height: 1px;
-  background: rgb(var(--ink) / .08);
+  background: var(--hair);
 }
 
 .mark {
   position: absolute;
-  top: 2px;
-  height: 6px;
   min-width: 3px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--lilac), var(--peach));
-  opacity: .62;
   transform-origin: left center;
-  transition: opacity .3s;
 }
-.mark.cancelled { opacity: .24; }
-.mark:hover { opacity: 1; }
 .mark::after { content: ""; position: absolute; inset: -9px -3px; }  /* easier to hover */
 .mark.fresh { animation: grow 1.6s .2s var(--ease) both; }
 @keyframes grow {
   from { opacity: 0; transform: scaleX(0); }
 }
 
+body[data-look="line"] .mark { top: 4px; height: 3px; background: var(--ink); }
+body[data-look="line"] .mark.cancelled { background: repeating-linear-gradient(90deg, var(--muted) 0 3px, transparent 3px 6px); }
+
+body[data-look="lantern"] .mark { top: 3px; height: 4px; border-radius: 2px; background: #FFB869; box-shadow: 0 0 10px rgb(255 184 105 / .55); }
+body[data-look="lantern"] .mark.cancelled { background: rgb(255 184 105 / .32); box-shadow: none; }
+
+body[data-look="tone"] .mark { top: 2px; height: 7px; border-radius: 4px; background: var(--lit); }
+body[data-look="tone"] .mark.cancelled { opacity: .4; }
+
 .hour {
   position: absolute;
   top: 17px;
   transform: translateX(-50%);
-  font-size: 10.5px;
-  letter-spacing: .06em;
   white-space: nowrap;
-  color: rgb(var(--ink) / .2);
 }
 .hour::before {
   content: "";
   position: absolute;
   left: 50%; top: -9px;
   width: 1px; height: 4px;
-  background: rgb(var(--ink) / .12);
+  background: var(--hair);
 }
 .hour.now { transform: translateX(-100%); }
 .hour.now::before { left: 100%; }
+
+body[data-look="line"] .hour    { font-size: 10px; letter-spacing: .1em; }
+body[data-look="lantern"] .hour { font-size: 15px; }
+body[data-look="tone"] .hour    { font-size: 11px; }
 
 #tip {
   position: absolute;
@@ -313,37 +419,50 @@ body[data-phase="done"] #done {
   transform: translateX(-50%);
   padding: 6px 11px 7px;
   border-radius: 8px;
-  border: 1px solid rgb(var(--ink) / .08);
-  background: rgb(32 36 48 / .92);
+  border: 1px solid var(--hair);
+  background: var(--tip);
   font-size: 12px;
   letter-spacing: .04em;
+  text-transform: none;
   white-space: nowrap;
-  color: rgb(var(--ink) / .78);
+  color: var(--ink);
   opacity: 0;
   pointer-events: none;
   transition: opacity .25s;
 }
+body[data-look="lantern"] #tip { font-size: 15px; letter-spacing: 0; }
 #tip.show { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
-  #bloom { animation: none; }
+  #bloom, .flicker { animation: none; }
 }
 </style>
 </head>
-<body data-phase="idle">
+<body data-phase="idle" data-look="line">
   <main>
     <svg id="flower" viewBox="-180 -180 360 360" role="group" aria-label="Focus timer">
       <defs>
-        <linearGradient id="petal-fill" gradientUnits="userSpaceOnUse" x1="0" y1="-14" x2="0" y2="-118">
-          <stop offset="0" stop-color="#a593cf"/>
-          <stop offset=".55" stop-color="#d4b5d0"/>
-          <stop offset="1" stop-color="#f2d4c3"/>
+        <linearGradient id="lantern-fill" gradientUnits="userSpaceOnUse" x1="0" y1="-18" x2="0" y2="-122">
+          <stop offset="0" stop-color="#FF8F45"/>
+          <stop offset=".6" stop-color="#FFC07A"/>
+          <stop offset="1" stop-color="#FFE6BC"/>
         </linearGradient>
+        <filter id="lantern-blur" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="10"/>
+        </filter>
+        <!-- the glow on Lantern's numbers when you point at one -->
+        <filter id="ember" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="3.5" result="blur"/>
+          <feFlood flood-color="#FFB869" flood-opacity=".7"/>
+          <feComposite in2="blur" operator="in"/>
+          <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
       </defs>
       <g id="bloom">
         <g id="ghosts"></g>
+        <g id="halo" filter="url(#lantern-blur)"><g class="flicker"><circle r="10"/></g></g>
         <g id="petals"></g>
-        <circle id="heart" r="4.5"/>
+        <circle id="heart"/>
       </g>
       <g id="presets"></g>
     </svg>
@@ -372,7 +491,7 @@ body[data-phase="done"] #done {
 <script>
 /* Twelve petals, one per 5-minute preset, laid out like a clock face. While a
  * session runs, the lit petals show the time that remains: each petal holds
- * five minutes and slowly folds back into the heart as its minutes pass. */
+ * five minutes and slowly closes as its minutes pass. */
 (() => {
   'use strict';
 
@@ -386,7 +505,6 @@ body[data-phase="done"] #done {
   const MIN_LOGGED = MINUTE;   // cancelled sessions shorter than this aren't kept
   const DONE_GRACE = 600;      // ms after finishing when clicks are ignored, so one meant to pause doesn't skip the finished view
   const STORE = 'flower.sessions';
-  const PETAL_D = 'M0,-14 C14,-28 24,-102 0,-118 C-24,-102 -14,-28 0,-14 Z';
 
   const $ = (sel) => document.querySelector(sel);
   const NS = 'http://www.w3.org/2000/svg';
@@ -400,13 +518,15 @@ body[data-phase="done"] #done {
   const timeEl = $('#time');
   const countEl = $('#count');
   const finishedEl = $('#finished');
+  const heartEl = $('#heart');
+  const petalsEl = $('#petals');
   const finishFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   const faviconEl = $('#favicon');
-  const IDLE_ICON = faviconEl.href;
+  const themeColorEl = $('meta[name="theme-color"]');
 
   /* ---------- build the flower and the dial ---------- */
 
-  const litPetals = [], ghostPetals = [];
+  const litPetals = [], haloPetals = [], ghostPetals = [], presetLabels = [];
 
   function wedge(deg) {
     const a0 = ((deg - 15) * Math.PI) / 180, a1 = ((deg + 15) * Math.PI) / 180;
@@ -415,25 +535,31 @@ body[data-phase="done"] #done {
     return `M${pt(r0, a0)} L${pt(r1, a0)} A${r1},${r1} 0 0 1 ${pt(r1, a1)} L${pt(r0, a1)} A${r0},${r0} 0 0 0 ${pt(r0, a0)} Z`;
   }
 
+  // a petal path inside a group that turns it to its place on the dial
+  function placed(parent, deg, list) {
+    const holder = svg('g', { transform: `rotate(${deg})` });
+    const petal = svg('path', { opacity: 0 });
+    holder.append(petal);
+    parent.append(holder);
+    list.push(petal);
+  }
+
   for (let k = 1; k <= PETALS; k++) {
     const deg = k * 30, rad = (deg * Math.PI) / 180, minutes = k * STEP;
 
-    const ghost = svg('path', { d: PETAL_D, transform: `rotate(${deg})` });
+    const ghost = svg('path', { transform: `rotate(${deg})` });
     $('#ghosts').append(ghost);
     ghostPetals.push(ghost);
 
-    const holder = svg('g', { transform: `rotate(${deg})` });
-    const petal = svg('path', { d: PETAL_D, opacity: 0 });
-    holder.append(petal);
-    $('#petals').append(holder);
-    litPetals.push(petal);
+    placed(petalsEl, deg, litPetals);
+    placed($('#halo .flicker'), deg, haloPetals);
 
     const preset = svg('g', {
       class: 'preset', tabindex: 0, role: 'button',
       'aria-label': `Focus for ${minutes} minutes`, 'data-minutes': minutes,
     });
     const label = svg('text', { x: (152 * Math.sin(rad)).toFixed(2), y: (-152 * Math.cos(rad)).toFixed(2) });
-    label.textContent = minutes;
+    presetLabels.push(label);
     preset.append(svg('path', { class: 'hit', d: wedge(deg) }), label);
     $('#presets').append(preset);
 
@@ -446,6 +572,71 @@ body[data-phase="done"] #done {
     preset.addEventListener('pointerleave', preview(false));
     preset.addEventListener('focus', preview(true));
     preset.addEventListener('blur', preview(false));
+  }
+
+  /* ---------- looks ---------- */
+
+  // Each time the dial comes back, one of these is picked at random, a third
+  // each; Tone then picks one of its four colours, a quarter each. Colours and
+  // type live in the CSS under body[data-look] and body[data-palette].
+  // petal(f) gives a lit petal's [scale, opacity] when f of its 5 minutes remain.
+  const LOOKS = {
+    line: {
+      d: 'M0,-14 C14,-28 24,-102 0,-118 C-24,-102 -14,-28 0,-14 Z',
+      heart: 3.2,
+      label: (m) => String(m).padStart(2, '0'),
+      petal: (f) => [1, f > 0.004 ? 1 : 0],
+      unwinds: true,           // the outline is drawn back instead of shrinking
+    },
+    lantern: {
+      d: 'M0,-18 C11,-36 17,-98 0,-122 C-17,-98 -11,-36 0,-18 Z',
+      heart: 3.5,
+      petal: (f) => [0.4 + 0.6 * f, (0.45 + 0.55 * f) * Math.min(1, f * 14)],
+      halo: true,
+    },
+    tone: {
+      d: 'M0,-15 C10,-26 19,-80 19,-98 A19,19 0 0 0 -19,-98 C-19,-80 -10,-26 0,-15 Z',
+      heart: 9,
+      petal: (f) => [0.34 + 0.66 * f, (0.5 + 0.5 * f) * Math.min(1, f * 14)],
+      palettes: ['moss', 'clay', 'dusk', 'plum'],
+    },
+  };
+  const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
+
+  let look, iconColors, idleIcon;   // set by newLook() at startup
+  let dashLen = 0;             // Line: length of one petal's outline
+
+  function newLook(fade) {
+    const name = pickOne(Object.keys(LOOKS));
+    const palette = LOOKS[name].palettes ? pickOne(LOOKS[name].palettes) : '';
+    if (fade && document.startViewTransition) document.startViewTransition(() => applyLook(name, palette));
+    else applyLook(name, palette);
+  }
+
+  function applyLook(name, palette) {
+    look = LOOKS[name];
+    body.dataset.look = name;
+    if (palette) body.dataset.palette = palette;
+    else delete body.dataset.palette;
+
+    for (const p of [...ghostPetals, ...litPetals, ...haloPetals]) p.setAttribute('d', look.d);
+    heartEl.setAttribute('r', look.heart);
+    presetLabels.forEach((el, i) => { el.textContent = (look.label || String)((i + 1) * STEP); });
+    if (look.unwinds) {
+      dashLen = litPetals[0].getTotalLength();
+      petalsEl.style.setProperty('--dash', (dashLen + 4).toFixed(2));
+    }
+
+    const css = getComputedStyle(body);
+    const token = (v) => css.getPropertyValue(v).trim();
+    iconColors = [token('--icon-a'), token('--icon-b')];
+    idleIcon = flowerIcon(...iconColors);
+    iconKey = '';
+    themeColorEl.content = token('--bg');
+
+    painted.fill(-1);
+    updateTab(Date.now());
+    requestRender();
   }
 
   /* ---------- state ---------- */
@@ -469,9 +660,11 @@ body[data-phase="done"] #done {
   const active = () => S.phase === 'running' || S.phase === 'paused';
 
   function setPhase(phase) {
+    const back = phase === 'idle' && S.phase !== 'idle';
     S.phase = phase;
     body.dataset.phase = phase;
     if (phase === 'idle') renderHistory();
+    if (back) newLook(true);   // the dial comes back in a fresh look
     updateTab(Date.now());
     requestRender();
   }
@@ -489,7 +682,7 @@ body[data-phase="done"] #done {
     update(S.countdownAt);
   }
 
-  // The chosen length stays visible for the whole session as brighter petal
+  // The chosen length stays visible for the whole session as stronger petal
   // outlines. (CSS shows them only outside the idle phase.)
   function markChoice(minutes) {
     for (let i = 0; i < PETALS; i++) {
@@ -624,11 +817,19 @@ body[data-phase="done"] #done {
       const f = Math.round(Math.min(1, Math.max(0, amount - i)) * 5000) / 5000;
       if (f === painted[i]) continue;
       painted[i] = f;
-      // the petal shrinks toward the heart as its five minutes pass,
-      // dimming a little, then fades out entirely in its last moments
-      const opacity = (0.42 + 0.58 * f) * Math.min(1, f * 14);
-      litPetals[i].setAttribute('opacity', opacity.toFixed(4));
-      litPetals[i].setAttribute('transform', `scale(${(0.34 + 0.66 * f).toFixed(4)})`);
+      // the petal closes as its five minutes pass, dimming a little,
+      // then fades out entirely in its last moments
+      const [scale, opacity] = look.petal(f);
+      const tf = `scale(${scale.toFixed(4)})`, op = opacity.toFixed(4);
+      const petal = litPetals[i];
+      petal.setAttribute('opacity', op);
+      petal.setAttribute('transform', tf);
+      petal.classList.toggle('partial', f > 0 && f < 1);
+      if (look.unwinds) petal.style.strokeDashoffset = (dashLen + 4 - f * dashLen).toFixed(2);
+      if (look.halo) {
+        haloPetals[i].setAttribute('opacity', op);
+        haloPetals[i].setAttribute('transform', tf);
+      }
     }
   }
 
@@ -638,21 +839,33 @@ body[data-phase="done"] #done {
   const iconCanvas = Object.assign(document.createElement('canvas'), { width: 64, height: 64 });
   let iconKey = '', iconUrl = '';
 
+  function flowerIcon(a, b) {
+    const petals = [0, 60, 120, 180, 240, 300].map((r) => `<use href="#p" transform="rotate(${r})"/>`).join('');
+    return 'data:image/svg+xml,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64"><defs>' +
+      `<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="-4" x2="0" y2="-30"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>` +
+      '<path id="p" d="M0,-4 C7,-9 11,-25 0,-30 C-11,-25 -7,-9 0,-4 Z"/>' +
+      `</defs><g fill="url(#g)">${petals}</g></svg>`);
+  }
+
   function pieIcon(fraction, paused) {
     const steps = 60, q = Math.ceil(fraction * steps);
     const key = `${q}${paused ? 'p' : ''}`;
     if (key === iconKey) return iconUrl;
+    const [a, b] = iconColors;
+    const alpha = paused ? 0.45 : 1;
     const c = iconCanvas.getContext('2d');
     c.clearRect(0, 0, 64, 64);
-    c.globalAlpha = paused ? 0.45 : 1;
+    c.globalAlpha = alpha * 0.28;
     c.beginPath();
     c.arc(32, 32, 29, 0, Math.PI * 2);
-    c.fillStyle = 'rgba(165, 147, 207, 0.28)';
+    c.fillStyle = a;
     c.fill();
+    c.globalAlpha = alpha;
     if (q > 0) {
       const g = c.createLinearGradient(32, 60, 32, 4);
-      g.addColorStop(0, '#a593cf');
-      g.addColorStop(1, '#f2d4c3');
+      g.addColorStop(0, a);
+      g.addColorStop(1, b);
       c.beginPath();
       c.moveTo(32, 32);
       c.arc(32, 32, 29, -Math.PI / 2, -Math.PI / 2 + (q / steps) * Math.PI * 2);
@@ -665,7 +878,7 @@ body[data-phase="done"] #done {
   }
 
   function updateTab(now) {
-    let title = 'flower', icon = IDLE_ICON;
+    let title = 'flower', icon = idleIcon;
     if (S.phase === 'countdown') {
       title = `${Math.max(1, S.beat)} · flower`;
     } else if (active()) {
@@ -882,6 +1095,7 @@ body[data-phase="done"] #done {
 
   /* ---------- go ---------- */
 
+  newLook(false);
   renderHistory();
   requestRender();
 })();

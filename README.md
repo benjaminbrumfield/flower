@@ -15,7 +15,9 @@ A quiet focus timer in a single HTML file.
 
 ## How it works
 
-Twelve petals make an hour, five minutes each. Pick a length and that many petals light up, each folding back into the center as its five minutes pass.
+Twelve petals make an hour, five minutes each. Pick a length and that many petals light up, each closing as its five minutes pass.
+
+Every time you come back to the dial, it picks one of three looks at random: **Line** (each petal one drawn stroke that unwinds), **Lantern** (glowing flame petals) or **Tone** (soft petals on a field of moss, clay, dusk or plum).
 
 ## Controls
 
