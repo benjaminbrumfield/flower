@@ -665,8 +665,38 @@ body[data-look="lantern"] #tip { font-size: 15px; letter-spacing: 0; }
     body.dataset.phase = phase;
     if (phase === 'idle') renderHistory();
     if (back) newLook(true);   // the dial comes back in a fresh look
+    syncWakeLock();
     updateTab(Date.now());
     requestRender();
+  }
+
+  // Phones dim and lock after a short idle time, which would hide the dial
+  // mid-session. A screen wake lock keeps the display on from the countdown
+  // until you're back at the presets, so the finished view stays readable;
+  // a pause, which can last indefinitely, lets the screen sleep as usual.
+  // The browser drops the lock whenever the tab is hidden, so it's taken
+  // again on the way back.
+  let wakeLock = null, asking = false, recheck = false;
+  const wantAwake = () =>
+    S.phase !== 'idle' && S.phase !== 'paused' && document.visibilityState === 'visible';
+
+  async function syncWakeLock() {
+    if (!navigator.wakeLock) return;
+    if (asking) { recheck = true; return; }   // settle once the pending request does
+    if (wantAwake() && !wakeLock) {
+      asking = true;
+      try {
+        const lock = await navigator.wakeLock.request('screen');
+        lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+        wakeLock = lock;
+      } catch { /* refused, e.g. by battery saver: the screen sleeps as usual */ }
+      asking = false;
+      if (recheck) { recheck = false; syncWakeLock(); }
+    } else if (!wantAwake() && wakeLock) {
+      const lock = wakeLock;
+      wakeLock = null;
+      lock.release();
+    }
   }
 
   function start(minutes) {
@@ -955,6 +985,7 @@ body[data-look="lantern"] #tip { font-size: 15px; letter-spacing: 0; }
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    syncWakeLock();
     requestRender();
   });
 
